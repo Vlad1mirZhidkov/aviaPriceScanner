@@ -13,6 +13,9 @@ import lombok.RequiredArgsConstructor;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
+import com.example.priceParser.model.FlightSearchResponse;
+import com.example.priceParser.model.FlightOffer;
+import com.example.priceParser.util.FlightOfferComparator;
 
 @RestController
 @RequestMapping("/api/flights")
@@ -35,8 +38,7 @@ public class FlightController {
             @RequestParam String originLocationCode,
             @RequestParam String destinationLocationCode,
             @RequestParam String departureDate,
-            @RequestParam(required = false) Integer adults,
-            @RequestParam(required = false) String currencyCode
+            @RequestParam(required = false, defaultValue = "RUB") String currencyCode
     ) {
         try {
             String accessToken = getAccessToken();
@@ -46,10 +48,8 @@ public class FlightController {
             headers.setBearerAuth(accessToken);
             headers.setContentType(MediaType.APPLICATION_JSON);
             
-            // Создаем правильную структуру запроса
             Map<String, Object> requestBody = new HashMap<>();
             
-            // Добавляем originDestinations
             Map<String, Object> originDestination = new HashMap<>();
             originDestination.put("id", "1");
             originDestination.put("originLocationCode", originLocationCode);
@@ -59,29 +59,35 @@ public class FlightController {
             originDestination.put("departureDateTimeRange", dateRange);
             requestBody.put("originDestinations", List.of(originDestination));
             
-            // Добавляем travelers
             Map<String, Object> traveler = new HashMap<>();
             traveler.put("id", "1");
             traveler.put("travelerType", "ADULT");
             requestBody.put("travelers", List.of(traveler));
             
-            // Добавляем sources
             requestBody.put("sources", List.of("GDS"));
             
-            // Добавляем дополнительные параметры
             requestBody.put("searchCriteria", new HashMap<String, Object>() {{
                 put("maxFlightOffers", 20);
                 put("flightFilters", new HashMap<String, Object>());
             }});
             
-            if (currencyCode != null) {
-                requestBody.put("currencyCode", currencyCode);
-            }
+            requestBody.put("currencyCode", currencyCode);
             
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
-            ResponseEntity<Map> response = restTemplate.postForEntity(searchUrl, request, Map.class);
+            ResponseEntity<FlightSearchResponse> response = restTemplate.postForEntity(
+                searchUrl, 
+                request, 
+                FlightSearchResponse.class
+            );
             
-            return ResponseEntity.ok(response.getBody());
+            List<FlightOffer> offers = response.getBody().getData();
+            
+            // Сортируем предложения
+            if (offers != null && !offers.isEmpty()) {
+                offers.sort(new FlightOfferComparator());
+            }
+            
+            return ResponseEntity.ok(offers);
             
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Ошибка при поиске рейсов: " + e.getMessage());

@@ -4,48 +4,44 @@ import com.example.priceParser.model.FlightOffer;
 import java.util.Comparator;
 
 public class FlightOfferComparator implements Comparator<FlightOffer> {
+    
     @Override
     public int compare(FlightOffer o1, FlightOffer o2) {
-        // Сначала сравниваем по цене
-        int priceCompare = o1.getPrice().getGrandTotal().compareTo(o2.getPrice().getGrandTotal());
+        double price1 = Double.parseDouble(o1.getPrice().getGrandTotal());
+        double price2 = Double.parseDouble(o2.getPrice().getGrandTotal());
         
-        if (priceCompare != 0) {
-            return priceCompare;
+        int priceCompare = Double.compare(price1, price2);
+        
+        if (priceCompare == 0) {
+            String duration1 = o1.getItineraries().get(0).getDuration();
+            String duration2 = o2.getItineraries().get(0).getDuration();
+            
+            return parseDuration(duration1) - parseDuration(duration2);
         }
         
-        // Если цены равны, сравниваем по длительности
-        String duration1 = o1.getItineraries().get(0).getDuration();
-        String duration2 = o2.getItineraries().get(0).getDuration();
-        
-        // Преобразуем строки длительности (PT2H30M) в минуты
-        int minutes1 = parseDuration(duration1);
-        int minutes2 = parseDuration(duration2);
-        
-        return Integer.compare(minutes1, minutes2);
+        return priceCompare;
     }
     
     private int parseDuration(String duration) {
-        // Убираем PT в начале строки
         duration = duration.substring(2);
+        int hours = 0;
         int minutes = 0;
         
-        // Находим часы
         int hIndex = duration.indexOf('H');
         if (hIndex > 0) {
-            minutes += Integer.parseInt(duration.substring(0, hIndex)) * 60;
+            hours = Integer.parseInt(duration.substring(0, hIndex));
             duration = duration.substring(hIndex + 1);
         }
         
-        // Находим минуты
         int mIndex = duration.indexOf('M');
         if (mIndex > 0) {
-            minutes += Integer.parseInt(duration.substring(0, mIndex));
+            minutes = Integer.parseInt(duration.substring(0, mIndex));
         }
         
-        return minutes;
+        return hours * 60 + minutes;
     }
     
     public int parseFlightDuration(String duration) {
         return parseDuration(duration);
     }
-} 
+}

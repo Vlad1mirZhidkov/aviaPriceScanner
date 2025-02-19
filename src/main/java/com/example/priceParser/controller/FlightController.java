@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 import com.example.priceParser.model.FlightSearchResponse;
 import com.example.priceParser.model.FlightOffer;
 import com.example.priceParser.util.FlightOfferComparator;
@@ -82,9 +84,11 @@ public class FlightController {
             
             List<FlightOffer> offers = response.getBody().getData();
             
-            // Сортируем предложения
             if (offers != null && !offers.isEmpty()) {
                 offers.sort(new FlightOfferComparator());
+                
+                Set<String> seenPrices = new HashSet<>();
+                offers.removeIf(offer -> !seenPrices.add(offer.getPrice().getGrandTotal()));
             }
             
             return ResponseEntity.ok(offers);
@@ -110,4 +114,4 @@ public class FlightController {
         
         return (String) response.getBody().get("access_token");
     }
-} 
+}

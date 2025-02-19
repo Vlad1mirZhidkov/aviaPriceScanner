@@ -1,4 +1,4 @@
-package com.example.priceParser.model;
+package com.example.priceParser.DTO;
 
 import lombok.Data;
 import java.util.List;

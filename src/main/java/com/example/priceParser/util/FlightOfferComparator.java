@@ -1,7 +1,8 @@
 package com.example.priceParser.util;
 
-import com.example.priceParser.model.FlightOffer;
 import java.util.Comparator;
+    
+import com.example.priceParser.DTO.FlightOffer;
 
 public class FlightOfferComparator implements Comparator<FlightOffer> {
     

@@ -15,9 +15,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.HashSet;
-import com.example.priceParser.model.FlightSearchResponse;
-import com.example.priceParser.model.FlightOffer;
+import org.springframework.http.HttpMethod;
+import org.springframework.core.ParameterizedTypeReference;
+
+import com.example.priceParser.DTO.FlightOffer;
+import com.example.priceParser.DTO.FlightSearchResponse;
 import com.example.priceParser.util.FlightOfferComparator;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
 
 @RestController
 @RequestMapping("/api/flights")
@@ -103,15 +109,88 @@ public class FlightController {
         
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setBasicAuth(apiKey, apiSecret); 
         
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("grant_type", "client_credentials");
-        params.add("client_id", apiKey);
-        params.add("client_secret", apiSecret);
         
         HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
-        ResponseEntity<Map> response = restTemplate.postForEntity(tokenUrl, request, Map.class);
         
-        return (String) response.getBody().get("access_token");
+        try {
+            ResponseEntity<Map> response = restTemplate.postForEntity(tokenUrl, request, Map.class);
+            
+            if (response.getBody() != null && response.getBody().get("access_token") != null) {
+                String token = (String) response.getBody().get("access_token");
+                System.out.println("Получен токен: " + token);
+                return token;
+            } else {
+                throw new RuntimeException("Токен не получен в ответе");
+            }
+        } catch (Exception e) {
+            System.err.println("Ошибка при получении токена: " + e.getMessage());
+            throw new RuntimeException("Ошибка при получении токена: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/location")
+    public ResponseEntity<?> searchLocations(@RequestParam String keyword) {
+        try {
+            String accessToken = getAccessToken();
+            String searchUrl = baseUrl.replace("v2", "v1") + "/reference-data/locations?keyword=" + keyword + "&subType=CITY,AIRPORT";
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(accessToken);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            
+            HttpEntity<String> request = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map> response = restTemplate.exchange(searchUrl, HttpMethod.GET, request, Map.class);
+            Map<String, Object> responseBody = response.getBody();
+            if (responseBody != null) {
+                Object metaObj = responseBody.get("meta");
+                if (metaObj instanceof Map) {
+                    ((Map) metaObj).remove("links");
+                }
+            }
+            return ResponseEntity.ok(responseBody);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Ошибка при поиске локаций: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/airports")
+    public ResponseEntity<?> getAirports() {
+        try {
+            String apiUrl = "https://api.travelpayouts.com/data/ru/airports.json";
+            
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                apiUrl,
+                HttpMethod.GET,
+                null,
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            
+            return ResponseEntity.ok(response.getBody());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Ошибка при получении списка аэропортов: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/cities")
+    public ResponseEntity<?> getCities() {
+        try {
+            String apiUrl = "https://api.travelpayouts.com/data/ru/cities.json";
+            
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                apiUrl,
+                HttpMethod.GET,
+                null,
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            
+            return ResponseEntity.ok(response.getBody());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Ошибка при получении списка аэропортов: " + e.getMessage());
+        }
     }
 }

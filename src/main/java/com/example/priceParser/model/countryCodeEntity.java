@@ -20,11 +20,8 @@ public class countryCodeEntity {
     
     @Type(JsonType.class)
     @Column(columnDefinition = "jsonb")
-    private List<String> variantNames;  // ["Россия", "России", "в России"]
+    private List<String> variantNames;  
     
     @OneToMany(mappedBy = "country")
     private List<cityCodeEntity> cities;
-    
-    @OneToMany(mappedBy = "country")
-    private List<airportCodeEntity> airports;
 } 

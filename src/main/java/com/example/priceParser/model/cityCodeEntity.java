@@ -27,7 +27,7 @@ public class cityCodeEntity {
     
     @ManyToOne
     @JoinColumn(name = "country_code")
-    private CountryCodeEntity country;
+    private countryCodeEntity country;
     
     @OneToMany(mappedBy = "city")
     private List<airportCodeEntity> airports;

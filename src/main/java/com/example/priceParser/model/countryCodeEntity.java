@@ -14,7 +14,7 @@ import java.util.List;
 @Entity
 @Table(name = "countries")
 @Data
-public class CountryCodeEntity {
+public class countryCodeEntity {
     @Id
     private String countryCode;
     
@@ -22,9 +22,9 @@ public class CountryCodeEntity {
     @Column(columnDefinition = "jsonb")
     private List<String> variantNames;  // ["Россия", "России", "в России"]
     
-    @OneToMany(mappedBy = "countryCode")
+    @OneToMany(mappedBy = "country")
     private List<cityCodeEntity> cities;
     
-    @OneToMany(mappedBy = "countryCode")
+    @OneToMany(mappedBy = "country")
     private List<airportCodeEntity> airports;
 } 

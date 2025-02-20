@@ -21,7 +21,7 @@ public class airportCodeEntity {
     
     @ManyToOne
     @JoinColumn(name = "country_code")
-    private CountryCodeEntity country;
+    private countryCodeEntity country;
     
     @Column(name = "airport_name")
     private String airportName;

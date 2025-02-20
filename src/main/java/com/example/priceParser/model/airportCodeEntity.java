@@ -6,6 +6,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
+import jakarta.persistence.Column;
 
 @Entity
 @Table(name = "airport_codes")
@@ -16,7 +17,12 @@ public class airportCodeEntity {
     
     @ManyToOne
     @JoinColumn(name = "city_code")
-    private cityCodeEntity cityCode;
-    private String country_code;
-    private String airport_name;
+    private cityCodeEntity city;
+    
+    @ManyToOne
+    @JoinColumn(name = "country_code")
+    private CountryCodeEntity country;
+    
+    @Column(name = "airport_name")
+    private String airportName;
 }

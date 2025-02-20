@@ -194,4 +194,23 @@ public class FlightController {
             return ResponseEntity.badRequest().body("Ошибка при получении списка аэропортов: " + e.getMessage());
         }
     }
+
+    @GetMapping("/countries")
+    public ResponseEntity<?> getCountries() {
+        try {
+            String apiUrl = "https://api.travelpayouts.com/data/ru/countries.json";
+            
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                apiUrl,
+                HttpMethod.GET,
+                null,
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            
+            return ResponseEntity.ok(response.getBody());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Ошибка при получении списка аэропортов: " + e.getMessage());
+        }
+    }
+    
 }

@@ -132,6 +132,7 @@ public class FlightController {
         }
     }
 
+    // No russian airports, -------------------------DEPRECATED-----------------------------------
     @GetMapping("/location")
     public ResponseEntity<?> searchLocations(@RequestParam String keyword) {
         try {

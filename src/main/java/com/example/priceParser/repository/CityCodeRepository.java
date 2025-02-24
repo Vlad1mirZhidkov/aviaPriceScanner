@@ -24,7 +24,14 @@ public interface CityCodeRepository extends JpaRepository<CityCodeEntity, String
            "WHERE value ILIKE :pattern)", nativeQuery = true)
     List<CityCodeEntity> findByNamePattern(@Param("pattern") String pattern);
 
-    @Query(value = "SELECT * FROM cities WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(variant_names) " +
-           "WHERE value ILIKE CONCAT('%', :name, '%'))", nativeQuery = true)
+    @Query(value = "SELECT DISTINCT c.* FROM cities c " +
+           "WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(c.variant_names) name " +
+           "WHERE name ILIKE CONCAT('%', :name, '%'))", nativeQuery = true)
     List<CityCodeEntity> findByVariantNamesContainingIgnoreCase(@Param("name") String name);
+
+    @Query(value = "SELECT DISTINCT c.* FROM cities c " +
+           "WHERE LOWER(c.city_code) LIKE LOWER(CONCAT('%', :name, '%')) OR " +
+           "EXISTS (SELECT 1 FROM jsonb_array_elements_text(c.variant_names) name " +
+           "WHERE name ILIKE CONCAT('%', :name, '%'))", nativeQuery = true)
+    List<CityCodeEntity> findByPartialName(@Param("name") String name);
 } 

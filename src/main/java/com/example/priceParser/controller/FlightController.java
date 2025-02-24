@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpMethod;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.priceParser.DTO.FlightOffer;
 import com.example.priceParser.DTO.FlightSearchResponse;
@@ -30,10 +31,19 @@ import com.example.priceParser.model.CityCodeEntity;
 import com.example.priceParser.repository.CityCodeRepository;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import lombok.extern.slf4j.Slf4j;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import lombok.Data;
+import lombok.AllArgsConstructor;
+import com.example.priceParser.service.CityService;
 
 @RestController
 @RequestMapping("/api/flights")
 @RequiredArgsConstructor
+@Slf4j
 public class FlightController {
     
     @Value("${amadeus.api.key}")
@@ -47,74 +57,139 @@ public class FlightController {
     
     private final RestTemplate restTemplate;
 
-    private final AirportCodeRepository airportCodeRepository;
-    
-    private final CityCodeRepository cityCodeRepository;
+    private final CityService cityService;
 
+    @Data
+    @AllArgsConstructor
+    public static class FlightSearchRequest {
+        private String originCode;
+        private String destinationCode;
+        private String departureDate;
+        private String currencyCode;
+    }
 
+    @Transactional
     @GetMapping("/search-flights")
-    public ResponseEntity<?> test(@RequestParam String nameDepartureCity, @RequestParam String nameDestinationCity, @RequestParam String departureDate, @RequestParam(required = false, defaultValue = "RUB") String currencyCode) {
-        List<CityCodeEntity> departureCities = cityCodeRepository.findByVariantNamesContainingIgnoreCase(nameDepartureCity);
-        List<CityCodeEntity> destinationCities = cityCodeRepository.findByVariantNamesContainingIgnoreCase(nameDestinationCity);
-        
-        if (!departureCities.isEmpty() && !destinationCities.isEmpty()) {
-            CityCodeEntity departureCity = departureCities.get(0);
-            CityCodeEntity destinationCity = destinationCities.get(0);
+    public ResponseEntity<?> test(@RequestParam String nameDepartureCity, 
+                                @RequestParam String nameDestinationCity, 
+                                @RequestParam String departureDate, 
+                                @RequestParam(required = false, defaultValue = "RUB") String currencyCode) {
+        try {
+            log.info("Поиск рейсов: {} -> {}, дата: {}", nameDepartureCity, nameDestinationCity, departureDate);
             
-            List<AirportCodeEntity> departureAirports = departureCity.getAirports();
-            List<AirportCodeEntity> destinationAirports = destinationCity.getAirports();
-            
-            List<FlightOffer> flightOffers = new ArrayList<>();
+            List<CityCodeEntity> departureCities = cityService.findCitiesWithAirports(nameDepartureCity);
+            List<CityCodeEntity> destinationCities = cityService.findCitiesWithAirports(nameDestinationCity);
 
-            if (!departureAirports.isEmpty() && !destinationAirports.isEmpty()) {
-                List<String> departureCodes = departureAirports.stream()
-                    .map(AirportCodeEntity::getAirportCode)
-                    .collect(Collectors.toList());
-                List<String> destinationCodes = destinationAirports.stream()
-                    .map(AirportCodeEntity::getAirportCode)
-                    .collect(Collectors.toList());
-                for (String departureCode : departureCodes) {
-                    for (String destinationCode : destinationCodes) {
-                        ResponseEntity<?> result = searchFlights(departureCode, destinationCode, departureDate, currencyCode);
-                        if (result.getBody() != null) {
-                            flightOffers.addAll((List<FlightOffer>) result.getBody());
+            if (departureCities.isEmpty() || destinationCities.isEmpty()) {
+                if (departureCities.isEmpty()) {
+                    departureCities = cityService.findCitiesByPartialNameWithAirports(nameDepartureCity);
+                }
+                if (destinationCities.isEmpty()) {
+                    destinationCities = cityService.findCitiesByPartialNameWithAirports(nameDestinationCity);
+                }
+            }
+
+            if (departureCities.isEmpty() || destinationCities.isEmpty()) {
+                String message = String.format("Города не найдены: %s и/или %s", 
+                    departureCities.isEmpty() ? nameDepartureCity : "",
+                    destinationCities.isEmpty() ? nameDestinationCity : "");
+                log.warn(message);
+                return ResponseEntity.badRequest().body(message);
+            }
+
+            List<FlightSearchRequest> searchRequests = new ArrayList<>();
+            for (CityCodeEntity departureCity : departureCities) {
+                for (CityCodeEntity destinationCity : destinationCities) {
+                    List<AirportCodeEntity> departureAirports = departureCity.getAirports();
+                    List<AirportCodeEntity> destinationAirports = destinationCity.getAirports();
+
+                    if (!departureAirports.isEmpty() && !destinationAirports.isEmpty()) {
+                        for (AirportCodeEntity depAirport : departureAirports) {
+                            for (AirportCodeEntity destAirport : destinationAirports) {
+                                searchRequests.add(new FlightSearchRequest(
+                                    depAirport.getAirportCode(),
+                                    destAirport.getAirportCode(),
+                                    departureDate,
+                                    currencyCode
+                                ));
+                            }
                         }
                     }
                 }
-                
-                flightOffers.sort((o1, o2) -> {
-                    Double price1 = Double.parseDouble(o1.getPrice().getGrandTotal());
-                    Double price2 = Double.parseDouble(o2.getPrice().getGrandTotal());
-                    
-                    int priceCompare = price1.compareTo(price2);
-                    if (priceCompare != 0) {
-                        return priceCompare;
-                    }
-                    
-                    int duration1 = parseDuration(o1.getItineraries().get(0).getDuration());
-                    int duration2 = parseDuration(o2.getItineraries().get(0).getDuration());
-                    return Integer.compare(duration1, duration2);
-                });
-                
-                Map<Double, FlightOffer> uniqueOffers = new LinkedHashMap<>();
-                for (FlightOffer offer : flightOffers) {
-                    Double price = Double.parseDouble(offer.getPrice().getGrandTotal());
-                    if (!uniqueOffers.containsKey(price) || 
-                        parseDuration(offer.getItineraries().get(0).getDuration()) < 
-                        parseDuration(uniqueOffers.get(price).getItineraries().get(0).getDuration())) {
-                        uniqueOffers.put(price, offer);
-                    }
-                }
-                
-                return ResponseEntity.ok(new ArrayList<>(uniqueOffers.values()));
             }
-            return ResponseEntity.ok(flightOffers);
+
+            if (searchRequests.isEmpty()) {
+                return ResponseEntity.ok(new ArrayList<>());
+            }
+
+            int maxConcurrentRequests = 5;
+            ExecutorService executor = Executors.newFixedThreadPool(maxConcurrentRequests);
+            
+            try {
+                List<CompletableFuture<List<FlightOffer>>> futures = searchRequests.stream()
+                    .map(request -> CompletableFuture.supplyAsync(() -> {
+                        try {
+                            ResponseEntity<FlightSearchResponse> response = searchFlights(
+                                request.getOriginCode(),
+                                request.getDestinationCode(),
+                                request.getDepartureDate(),
+                                request.getCurrencyCode()
+                            );
+                            List<FlightOffer> offers = response.getBody() != null ? response.getBody().getData() : new ArrayList<>();
+                            return offers;
+                        } catch (Exception e) {
+                            log.error("Ошибка при поиске рейса {} -> {}: {}", 
+                                request.getOriginCode(), request.getDestinationCode(), e.getMessage());
+                            return new ArrayList<FlightOffer>();
+                        }
+                    }, executor))
+                    .collect(Collectors.toList());
+
+                List<FlightOffer> allFlightOffers = futures.stream()
+                    .map(future -> {
+                        try {
+                            return future.get(10, TimeUnit.SECONDS);
+                        } catch (Exception e) {
+                            log.error("Ошибка при получении результатов поиска: {}", e.getMessage());
+                            return new ArrayList<FlightOffer>();
+                        }
+                    })
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList());
+
+                if (allFlightOffers.isEmpty()) {
+                    return ResponseEntity.ok(allFlightOffers);
+                }
+
+                Map<Double, FlightOffer> uniqueOffers = allFlightOffers.stream()
+                    .collect(Collectors.toMap(
+                        offer -> Double.parseDouble(offer.getPrice().getGrandTotal()),
+                        offer -> offer,
+                        (offer1, offer2) -> parseDuration(offer1.getItineraries().get(0).getDuration()) <
+                                          parseDuration(offer2.getItineraries().get(0).getDuration()) ? offer1 : offer2,
+                        LinkedHashMap::new
+                    ));
+
+                List<FlightOffer> sortedOffers = uniqueOffers.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(Map.Entry::getValue)
+                    .collect(Collectors.toList());
+
+                log.info("Найдено {} уникальных предложений", sortedOffers.size());
+                return ResponseEntity.ok(sortedOffers);
+
+            } finally {
+                executor.shutdown();
+            }
+            
+        } catch (Exception e) {
+            log.error("Общая ошибка при поиске рейсов: {}", e.getMessage());
+            return ResponseEntity.status(500).body("Ошибка при поиске рейсов: " + e.getMessage());
         }
-        return ResponseEntity.ok("No airports found");
     }
     
     @GetMapping("/search")
-    public ResponseEntity<?> searchFlights(
+    public ResponseEntity<FlightSearchResponse> searchFlights(
             @RequestParam String originLocationCode,
             @RequestParam String destinationLocationCode,
             @RequestParam String departureDate,
@@ -154,25 +229,29 @@ public class FlightController {
             requestBody.put("currencyCode", currencyCode);
             
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            
+            log.info("Поиск рейсов: {} -> {}", originLocationCode, destinationLocationCode);
             ResponseEntity<FlightSearchResponse> response = restTemplate.postForEntity(
                 searchUrl, 
                 request, 
                 FlightSearchResponse.class
             );
             
-            List<FlightOffer> offers = response.getBody().getData();
-            
-            if (offers != null && !offers.isEmpty()) {
-                offers.sort(new FlightOfferComparator());
-                
-                Set<String> seenPrices = new HashSet<>();
-                offers.removeIf(offer -> !seenPrices.add(offer.getPrice().getGrandTotal()));
+            if (response.getBody() != null && response.getBody().getData() != null) {
+                log.info("Найдено {} предложений для {} -> {}", 
+                    response.getBody().getData().size(), 
+                    originLocationCode, 
+                    destinationLocationCode);
+            } else {
+                log.warn("Нет предложений для {} -> {}", originLocationCode, destinationLocationCode);
             }
             
-            return ResponseEntity.ok(offers);
+            return response;
             
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Ошибка при поиске рейсов: " + e.getMessage());
+            log.error("Ошибка при поиске рейсов {} -> {}: {}", 
+                originLocationCode, destinationLocationCode, e.getMessage());
+            throw new RuntimeException("Ошибка при поиске рейсов: " + e.getMessage());
         }
     }
     
@@ -286,8 +365,7 @@ public class FlightController {
     }
     
     private int parseDuration(String duration) {
-        // Предполагаем, что длительность в формате "PT2H30M" (2 часа 30 минут)
-        duration = duration.substring(2); // Убираем "PT"
+        duration = duration.substring(2);
         int hours = 0;
         int minutes = 0;
         
@@ -302,6 +380,6 @@ public class FlightController {
             minutes = Integer.parseInt(duration.substring(0, mIndex));
         }
         
-        return hours * 60 + minutes; // Конвертируем всё в минуты
+        return hours * 60 + minutes;
     }
 }

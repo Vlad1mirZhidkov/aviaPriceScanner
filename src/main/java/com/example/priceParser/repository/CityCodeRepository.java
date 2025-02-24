@@ -23,4 +23,8 @@ public interface CityCodeRepository extends JpaRepository<CityCodeEntity, String
     @Query(value = "SELECT * FROM cities WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(variant_names) " +
            "WHERE value ILIKE :pattern)", nativeQuery = true)
     List<CityCodeEntity> findByNamePattern(@Param("pattern") String pattern);
+
+    @Query(value = "SELECT * FROM cities WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(variant_names) " +
+           "WHERE value ILIKE CONCAT('%', :name, '%'))", nativeQuery = true)
+    List<CityCodeEntity> findByVariantNamesContainingIgnoreCase(@Param("name") String name);
 } 

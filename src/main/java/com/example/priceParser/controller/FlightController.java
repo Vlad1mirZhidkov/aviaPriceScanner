@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.HashSet;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpMethod;
 import org.springframework.core.ParameterizedTypeReference;
 
@@ -23,7 +24,11 @@ import com.example.priceParser.DTO.FlightSearchResponse;
 import com.example.priceParser.util.FlightOfferComparator;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-
+import com.example.priceParser.model.AirportCodeEntity;
+import com.example.priceParser.repository.AirportCodeRepository;
+import com.example.priceParser.model.CityCodeEntity;
+import com.example.priceParser.repository.CityCodeRepository;
+import java.util.ArrayList;
 
 @RestController
 @RequestMapping("/api/flights")
@@ -40,6 +45,46 @@ public class FlightController {
     private String baseUrl;
     
     private final RestTemplate restTemplate;
+
+    private final AirportCodeRepository airportCodeRepository;
+    
+    private final CityCodeRepository cityCodeRepository;
+
+
+    @GetMapping("/test")
+    public ResponseEntity<?> test(@RequestParam String nameDepartureCity, @RequestParam String nameDestinationCity, @RequestParam String departureDate, @RequestParam(required = false, defaultValue = "RUB") String currencyCode) {
+        List<CityCodeEntity> departureCities = cityCodeRepository.findByVariantNamesContainingIgnoreCase(nameDepartureCity);
+        List<CityCodeEntity> destinationCities = cityCodeRepository.findByVariantNamesContainingIgnoreCase(nameDestinationCity);
+        
+        if (!departureCities.isEmpty() && !destinationCities.isEmpty()) {
+            CityCodeEntity departureCity = departureCities.get(0);
+            CityCodeEntity destinationCity = destinationCities.get(0);
+            
+            List<AirportCodeEntity> departureAirports = departureCity.getAirports();
+            List<AirportCodeEntity> destinationAirports = destinationCity.getAirports();
+            
+            List<FlightOffer> flightOffers = new ArrayList<>();
+
+            if (!departureAirports.isEmpty() && !destinationAirports.isEmpty()) {
+                List<String> departureCodes = departureAirports.stream()
+                    .map(AirportCodeEntity::getAirportCode)
+                    .collect(Collectors.toList());
+                List<String> destinationCodes = destinationAirports.stream()
+                    .map(AirportCodeEntity::getAirportCode)
+                    .collect(Collectors.toList());
+                for (String departureCode : departureCodes) {
+                    for (String destinationCode : destinationCodes) {
+                        ResponseEntity<?> result = searchFlights(departureCode, destinationCode, departureDate, currencyCode);
+                        if (result.getBody() != null) {
+                            flightOffers.addAll((List<FlightOffer>) result.getBody());
+                        }
+                    }
+                }
+            }
+            return ResponseEntity.ok(flightOffers);
+        }
+        return ResponseEntity.ok("No airports found");
+    }
     
     @GetMapping("/search")
     public ResponseEntity<?> searchFlights(
@@ -132,7 +177,7 @@ public class FlightController {
         }
     }
 
-    // No russian airports, -------------------------DEPRECATED-----------------------------------
+    // -------------------------------------------------DEPRECATED---------------------------------------------------------
     @GetMapping("/location")
     public ResponseEntity<?> searchLocations(@RequestParam String keyword) {
         try {

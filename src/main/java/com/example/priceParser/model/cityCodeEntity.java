@@ -10,25 +10,24 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import lombok.Data;
-import org.hibernate.annotations.Type;
-import com.vladmihalcea.hibernate.type.json.JsonType;
-
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "cities")
 @Data
-public class cityCodeEntity {
+public class CityCodeEntity {
     @Id
     private String cityCode;
     
-    @Type(JsonType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private List<String> variantNames;
     
     @ManyToOne
     @JoinColumn(name = "country_code")
-    private countryCodeEntity country;
+    private CountryCodeEntity country;
     
     @OneToMany(mappedBy = "city")
-    private List<airportCodeEntity> airports;
+    private List<AirportCodeEntity> airports;
 }

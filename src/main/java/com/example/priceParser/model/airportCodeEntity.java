@@ -11,17 +11,17 @@ import jakarta.persistence.Column;
 @Entity
 @Table(name = "airport_codes")
 @Data
-public class airportCodeEntity {
+public class AirportCodeEntity {
     @Id
     private String airportCode;
     
     @ManyToOne
     @JoinColumn(name = "city_code")
-    private cityCodeEntity city;
+    private CityCodeEntity city;
     
     @ManyToOne
     @JoinColumn(name = "country_code")
-    private countryCodeEntity country;
+    private CountryCodeEntity country;
     
     @Column(name = "airport_name")
     private String airportName;

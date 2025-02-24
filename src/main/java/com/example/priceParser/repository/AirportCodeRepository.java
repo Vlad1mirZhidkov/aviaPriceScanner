@@ -3,22 +3,22 @@ package com.example.priceParser.repository;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import com.example.priceParser.model.airportCodeEntity;
-import com.example.priceParser.model.cityCodeEntity;
+import com.example.priceParser.model.AirportCodeEntity;
+import com.example.priceParser.model.CityCodeEntity;
 
 import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface AirportCodeRepository extends JpaRepository<airportCodeEntity, String> {
+public interface AirportCodeRepository extends JpaRepository<AirportCodeEntity, String> {
     
-    Optional<airportCodeEntity> findByAirportCode(String airportCode);
+    Optional<AirportCodeEntity> findByAirportCode(String airportCode);
     
-    List<airportCodeEntity> findByCity(cityCodeEntity city);
+    List<AirportCodeEntity> findByCity(CityCodeEntity city);
     
-    List<airportCodeEntity> findByCityCityCode(String cityCode);
+    List<AirportCodeEntity> findByCityCityCode(String cityCode);
     
-    List<airportCodeEntity> findByCountryCode(String countryCode);
+    List<AirportCodeEntity> findByCountry_CountryCode(String countryCode);
     
-    List<airportCodeEntity> findByAirportNameContainingIgnoreCase(String name);
+    List<AirportCodeEntity> findByAirportNameContainingIgnoreCase(String name);
 } 

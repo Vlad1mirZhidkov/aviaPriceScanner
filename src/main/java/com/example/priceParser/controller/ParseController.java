@@ -10,7 +10,7 @@ import lombok.AllArgsConstructor;
 @RequestMapping("/api/admin")
 @Slf4j
 @AllArgsConstructor
-public class AdminController {
+public class ParseController {
     private final DataParsingService parsingService;
 
     @PostMapping("/parseAirports")

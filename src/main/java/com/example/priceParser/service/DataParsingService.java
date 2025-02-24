@@ -35,6 +35,10 @@ public class DataParsingService {
 
     @Value("${airports.api.url}")
     private String airportsApiUrl;
+    @Value("${cities.api.url}")
+    private String citiesApiUrl;
+    @Value("${countries.api.url}")
+    private String countriesApiUrl;
 
     public DataParsingService(
         RestTemplate restTemplate,
@@ -147,5 +151,85 @@ public class DataParsingService {
             
             airportRepository.save(airport);
         }
+    }
+
+    public void parseCountriesData() {
+        try {
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                countriesApiUrl,
+                HttpMethod.GET,
+                null,
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+
+            if (response.getBody() != null) {
+                response.getBody().forEach(countryData -> {
+                    String countryCode = (String) countryData.get("code");
+                    String countryName = (String) countryData.get("name");
+                    List<String> translations = extractTranslations(countryData);
+
+                    CountryCodeEntity country = countryRepository.findByCountryCode(countryCode)
+                        .orElseGet(CountryCodeEntity::new);
+                    
+                    country.setCountryCode(countryCode);
+                    country.setCountryName(countryName);
+                    country.setVariantNames(translations);
+                    
+                    countryRepository.save(country);
+                });
+                log.info("Парсинг стран успешно завершен");
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при парсинге стран", e);
+            throw new RuntimeException("Ошибка парсинга стран", e);
+        }
+    }
+
+    public void parseCitiesData() {
+        try {
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                citiesApiUrl,
+                HttpMethod.GET,
+                null,
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+
+            if (response.getBody() != null) {
+                response.getBody().forEach(cityData -> {
+                    String cityCode = (String) cityData.get("code");
+                    String countryCode = (String) cityData.get("country_code");
+                    List<String> translations = extractTranslations(cityData);
+
+                    CountryCodeEntity country = countryRepository.findByCountryCode(countryCode)
+                        .orElseThrow(() -> new RuntimeException("Страна не найдена: " + countryCode));
+
+                    CityCodeEntity city = cityRepository.findByCityCode(cityCode)
+                        .orElseGet(CityCodeEntity::new);
+                    
+                    city.setCityCode(cityCode);
+                    city.setCountry(country);
+                    city.setVariantNames(translations);
+                    
+                    cityRepository.save(city);
+                });
+                log.info("Парсинг городов успешно завершен");
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при парсинге городов", e);
+            throw new RuntimeException("Ошибка парсинга городов", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> extractTranslations(Map<String, Object> data) {
+        List<String> translations = new ArrayList<>();
+        String name = (String) data.get("name");
+        if (name != null) translations.add(name);
+
+        Map<String, String> nameTranslations = (Map<String, String>) data.get("name_translations");
+        if (nameTranslations != null) {
+            translations.addAll(nameTranslations.values());
+        }
+        return translations;
     }
 }

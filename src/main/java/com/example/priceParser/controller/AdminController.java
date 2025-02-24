@@ -24,4 +24,28 @@ public class AdminController {
                 .body("Ошибка: " + e.getMessage());
         }
     }
+
+    @PostMapping("/parseCountries")
+    public ResponseEntity<?> parseCountries() {
+        try {
+            parsingService.parseCountriesData();
+            return ResponseEntity.ok("Данные стран успешно обновлены");
+        } catch (Exception e) {
+            log.error("Ошибка при парсинге стран", e);
+            return ResponseEntity.internalServerError()
+                .body("Ошибка: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/parseCities")
+    public ResponseEntity<?> parseCities() {
+        try {
+            parsingService.parseCitiesData();
+            return ResponseEntity.ok("Данные городов успешно обновлены");
+        } catch (Exception e) {
+            log.error("Ошибка при парсинге городов", e);
+            return ResponseEntity.internalServerError()
+                .body("Ошибка: " + e.getMessage());
+        }
+    }
 } 

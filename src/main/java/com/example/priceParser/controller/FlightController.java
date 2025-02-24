@@ -29,6 +29,7 @@ import com.example.priceParser.repository.AirportCodeRepository;
 import com.example.priceParser.model.CityCodeEntity;
 import com.example.priceParser.repository.CityCodeRepository;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 
 @RestController
 @RequestMapping("/api/flights")
@@ -51,7 +52,7 @@ public class FlightController {
     private final CityCodeRepository cityCodeRepository;
 
 
-    @GetMapping("/test")
+    @GetMapping("/search-flights")
     public ResponseEntity<?> test(@RequestParam String nameDepartureCity, @RequestParam String nameDestinationCity, @RequestParam String departureDate, @RequestParam(required = false, defaultValue = "RUB") String currencyCode) {
         List<CityCodeEntity> departureCities = cityCodeRepository.findByVariantNamesContainingIgnoreCase(nameDepartureCity);
         List<CityCodeEntity> destinationCities = cityCodeRepository.findByVariantNamesContainingIgnoreCase(nameDestinationCity);
@@ -80,6 +81,32 @@ public class FlightController {
                         }
                     }
                 }
+                
+                flightOffers.sort((o1, o2) -> {
+                    Double price1 = Double.parseDouble(o1.getPrice().getGrandTotal());
+                    Double price2 = Double.parseDouble(o2.getPrice().getGrandTotal());
+                    
+                    int priceCompare = price1.compareTo(price2);
+                    if (priceCompare != 0) {
+                        return priceCompare;
+                    }
+                    
+                    int duration1 = parseDuration(o1.getItineraries().get(0).getDuration());
+                    int duration2 = parseDuration(o2.getItineraries().get(0).getDuration());
+                    return Integer.compare(duration1, duration2);
+                });
+                
+                Map<Double, FlightOffer> uniqueOffers = new LinkedHashMap<>();
+                for (FlightOffer offer : flightOffers) {
+                    Double price = Double.parseDouble(offer.getPrice().getGrandTotal());
+                    if (!uniqueOffers.containsKey(price) || 
+                        parseDuration(offer.getItineraries().get(0).getDuration()) < 
+                        parseDuration(uniqueOffers.get(price).getItineraries().get(0).getDuration())) {
+                        uniqueOffers.put(price, offer);
+                    }
+                }
+                
+                return ResponseEntity.ok(new ArrayList<>(uniqueOffers.values()));
             }
             return ResponseEntity.ok(flightOffers);
         }
@@ -258,4 +285,23 @@ public class FlightController {
         }
     }
     
+    private int parseDuration(String duration) {
+        // Предполагаем, что длительность в формате "PT2H30M" (2 часа 30 минут)
+        duration = duration.substring(2); // Убираем "PT"
+        int hours = 0;
+        int minutes = 0;
+        
+        int hIndex = duration.indexOf('H');
+        if (hIndex != -1) {
+            hours = Integer.parseInt(duration.substring(0, hIndex));
+            duration = duration.substring(hIndex + 1);
+        }
+        
+        int mIndex = duration.indexOf('M');
+        if (mIndex != -1) {
+            minutes = Integer.parseInt(duration.substring(0, mIndex));
+        }
+        
+        return hours * 60 + minutes; // Конвертируем всё в минуты
+    }
 }

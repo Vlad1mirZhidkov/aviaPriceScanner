@@ -70,13 +70,13 @@ public class FlightController {
 
     @Transactional
     @GetMapping("/search-flights")
-    public ResponseEntity<?> test(@RequestParam String nameDepartureCity, 
-                                @RequestParam String nameDestinationCity, 
-                                @RequestParam String departureDate, 
-                                @RequestParam(required = false, defaultValue = "RUB") String currencyCode) {
+    public ResponseEntity<?> test(@RequestParam String nameDepartureCity,
+                                  @RequestParam String nameDestinationCity,
+                                  @RequestParam String departureDate,
+                                  @RequestParam(required = false, defaultValue = "RUB") String currencyCode) {
         try {
             log.info("Поиск рейсов: {} -> {}, дата: {}", nameDepartureCity, nameDestinationCity, departureDate);
-            
+
             List<CityCodeEntity> departureCities = cityService.findCitiesWithAirports(nameDepartureCity);
             List<CityCodeEntity> destinationCities = cityService.findCitiesWithAirports(nameDestinationCity);
 
@@ -90,9 +90,9 @@ public class FlightController {
             }
 
             if (departureCities.isEmpty() || destinationCities.isEmpty()) {
-                String message = String.format("Города не найдены: %s и/или %s", 
-                    departureCities.isEmpty() ? nameDepartureCity : "",
-                    destinationCities.isEmpty() ? nameDestinationCity : "");
+                String message = String.format("Города не найдены: %s и/или %s",
+                        departureCities.isEmpty() ? nameDepartureCity : "",
+                        destinationCities.isEmpty() ? nameDestinationCity : "");
                 log.warn(message);
                 return ResponseEntity.badRequest().body(message);
             }
@@ -107,10 +107,10 @@ public class FlightController {
                         for (AirportCodeEntity depAirport : departureAirports) {
                             for (AirportCodeEntity destAirport : destinationAirports) {
                                 searchRequests.add(new FlightSearchRequest(
-                                    depAirport.getAirportCode(),
-                                    destAirport.getAirportCode(),
-                                    departureDate,
-                                    currencyCode
+                                        depAirport.getAirportCode(),
+                                        destAirport.getAirportCode(),
+                                        departureDate,
+                                        currencyCode
                                 ));
                             }
                         }
@@ -122,72 +122,55 @@ public class FlightController {
                 return ResponseEntity.ok(new ArrayList<>());
             }
 
-            int maxConcurrentRequests = 5;
-            ExecutorService executor = Executors.newFixedThreadPool(maxConcurrentRequests);
-            
-            try {
-                List<CompletableFuture<List<FlightOffer>>> futures = searchRequests.stream()
-                    .map(request -> CompletableFuture.supplyAsync(() -> {
-                        try {
-                            ResponseEntity<FlightSearchResponse> response = searchFlights(
-                                request.getOriginCode(),
-                                request.getDestinationCode(),
-                                request.getDepartureDate(),
-                                request.getCurrencyCode()
-                            );
-                            List<FlightOffer> offers = response.getBody() != null ? response.getBody().getData() : new ArrayList<>();
-                            return offers;
-                        } catch (Exception e) {
-                            log.error("Ошибка при поиске рейса {} -> {}: {}", 
-                                request.getOriginCode(), request.getDestinationCode(), e.getMessage());
-                            return new ArrayList<FlightOffer>();
-                        }
-                    }, executor))
-                    .collect(Collectors.toList());
+            // Последовательный поиск вместо многопоточного
+            List<FlightOffer> allFlightOffers = new ArrayList<>();
 
-                List<FlightOffer> allFlightOffers = futures.stream()
-                    .map(future -> {
-                        try {
-                            return future.get(10, TimeUnit.SECONDS);
-                        } catch (Exception e) {
-                            log.error("Ошибка при получении результатов поиска: {}", e.getMessage());
-                            return new ArrayList<FlightOffer>();
-                        }
-                    })
-                    .flatMap(List::stream)
-                    .collect(Collectors.toList());
+            for (FlightSearchRequest request : searchRequests) {
+                try {
+                    ResponseEntity<FlightSearchResponse> response = searchFlights(
+                            request.getOriginCode(),
+                            request.getDestinationCode(),
+                            request.getDepartureDate(),
+                            request.getCurrencyCode()
+                    );
 
-                if (allFlightOffers.isEmpty()) {
-                    return ResponseEntity.ok(allFlightOffers);
+                    if (response.getBody() != null && response.getBody().getData() != null) {
+                        allFlightOffers.addAll(response.getBody().getData());
+                    }
+                } catch (Exception e) {
+                    log.error("Ошибка при поиске рейса {} -> {}: {}",
+                            request.getOriginCode(), request.getDestinationCode(), e.getMessage());
                 }
+            }
 
-                Map<Double, FlightOffer> uniqueOffers = allFlightOffers.stream()
+            if (allFlightOffers.isEmpty()) {
+                return ResponseEntity.ok(allFlightOffers);
+            }
+
+            Map<Double, FlightOffer> uniqueOffers = allFlightOffers.stream()
                     .collect(Collectors.toMap(
-                        offer -> Double.parseDouble(offer.getPrice().getGrandTotal()),
-                        offer -> offer,
-                        (offer1, offer2) -> parseDuration(offer1.getItineraries().get(0).getDuration()) <
-                                          parseDuration(offer2.getItineraries().get(0).getDuration()) ? offer1 : offer2,
-                        LinkedHashMap::new
+                            offer -> Double.parseDouble(offer.getPrice().getGrandTotal()),
+                            offer -> offer,
+                            (offer1, offer2) -> parseDuration(offer1.getItineraries().get(0).getDuration()) <
+                                    parseDuration(offer2.getItineraries().get(0).getDuration()) ? offer1 : offer2,
+                            LinkedHashMap::new
                     ));
 
-                List<FlightOffer> sortedOffers = uniqueOffers.entrySet().stream()
+            List<FlightOffer> sortedOffers = uniqueOffers.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toList());
 
-                log.info("Найдено {} уникальных предложений", sortedOffers.size());
-                return ResponseEntity.ok(sortedOffers);
+            log.info("Найдено {} уникальных предложений", sortedOffers.size());
+            return ResponseEntity.ok(sortedOffers);
 
-            } finally {
-                executor.shutdown();
-            }
-            
         } catch (Exception e) {
             log.error("Общая ошибка при поиске рейсов: {}", e.getMessage());
             return ResponseEntity.status(500).body("Ошибка при поиске рейсов: " + e.getMessage());
         }
     }
-    
+
+
     @GetMapping("/search")
     public ResponseEntity<FlightSearchResponse> searchFlights(
             @RequestParam String originLocationCode,
